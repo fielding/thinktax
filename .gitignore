@@ -1,0 +1,44 @@
+# Build output
+dist/
+
+# Dependencies
+node_modules/
+
+# Config files with credentials (use config.sample.toml as template)
+config.toml
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# State and data directories (contain usage data)
+# These are stored in system directories, but ignore if copied locally
+state/
+data/
+events/
+snapshots/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Optional: local development overrides
+*.local

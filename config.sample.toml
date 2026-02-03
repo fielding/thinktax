@@ -1,0 +1,49 @@
+[ui]
+timezone = "America/Los_Angeles"
+includeUnknown = false
+
+[claude]
+projectsDir = "~/.claude/projects"
+
+[codex]
+home = "~/.codex"
+
+[cursor.dashboard]
+# Auth is auto-extracted from Cursor's state.vscdb - no manual config needed!
+# Override only if auto-detection doesn't work:
+# sessionToken = "user_id::jwt"
+# teamId = 123456
+lookbackDays = 30
+cacheTtlMinutes = 15
+
+[cursor.team]
+# Alternative: Team Admin API (requires team admin access)
+# Provide either spendUrl or apiBase + spendPath
+# spendUrl = "https://api.cursor.sh/..."
+# apiBase = "https://api.cursor.com"
+# spendPath = "/teams/spend"
+# endpoint = "/teams/daily-usage-data"
+# method = "POST"
+# lookbackDays = 30
+# body = "{\"startDate\":\"2026-01-01\",\"endDate\":\"2026-02-01\"}"
+# apiKey = "cursor-team-api-key"
+# email = "you@example.com"
+# token = "cursor-team-token"
+etagTtlMinutes = 15
+
+[cursor.local]
+# Optional local fallback
+# stateVscdbPath = "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+# estimateTranscripts = true
+# transcriptsDir = "$HOME/.cursor/projects"
+# estimateModel = "gpt-4o-mini"
+
+[[projects.mappings]]
+match.instanceId = "claude-instance-folder"
+id = "project-foo"
+name = "Project Foo"
+root = "/path/to/project"
+
+[[projects.mappings]]
+match.pathPrefix = "/path/to/other-project"
+name = "Other Project"
