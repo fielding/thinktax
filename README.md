@@ -4,6 +4,9 @@ A multi-provider LLM cost tracker for developers using Claude Code, Cursor, and 
 
 Track your AI coding assistant spending across all your tools in one place, with timezone-aware reporting, per-project attribution, and macOS menu bar integration via Sketchybar.
 
+![output](https://github.com/user-attachments/assets/61236fcb-1d64-4a34-9300-50bed269f360)
+
+
 ## Features
 
 - **Multi-provider support** - Claude Code, Cursor (Team API), Codex CLI
