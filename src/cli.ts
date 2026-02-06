@@ -9,7 +9,7 @@ import * as vegaLite from "vega-lite";
 import { collectClaude } from "./collectors/claude.js";
 import { collectCodex } from "./collectors/codex.js";
 import { collectCursor, buildWorkspaceActivityMap, findProjectForTimestamp } from "./collectors/cursor.js";
-import { loadConfig, resolveTimezone } from "./core/config.js";
+import { loadConfig, resolveTimezone, resolveBillingSessionsFile } from "./core/config.js";
 import { applyCosting } from "./core/cost.js";
 import { loadSummaries, loadEventsForRange, aggregateEvents } from "./core/aggregate.js";
 import { getPaths, ensurePaths } from "./core/paths.js";
@@ -18,12 +18,13 @@ import { readSyncState, writeSyncState } from "./core/state.js";
 import { writeEvents, loadAllStoredEvents, overwriteEvents } from "./core/storage.js";
 import { formatBreakdown, formatTotalsLine, formatUsd } from "./cli/utils.js";
 import { setVerbose, debug } from "./core/logger.js";
+import { readJsonl } from "./core/events.js";
 import type { UsageEvent, UsageProvider } from "./core/events.js";
 
-type BreakdownKey = "provider" | "project" | "model" | "source";
+type BreakdownKey = "provider" | "project" | "model" | "source" | "billing";
 
 function isBreakdownKey(value: string): value is BreakdownKey {
-  return ["provider", "project", "model", "source"].includes(value);
+  return ["provider", "project", "model", "source", "billing"].includes(value);
 }
 
 const program = new Command();
@@ -357,17 +358,42 @@ program
       return;
     }
 
+    // Load billing registry for Claude Code sessions
+    const billingFile = resolveBillingSessionsFile();
+    const billingEntries = await readJsonl<{ session_id: string; billing: string }>(billingFile);
+    const billingRegistry = new Map<string, string>();
+    for (const entry of billingEntries) {
+      if (entry.session_id && entry.billing) {
+        billingRegistry.set(entry.session_id, entry.billing);
+      }
+    }
+    const defaultBilling = config.claude?.billing?.defaultMode ?? "estimate";
+    console.log(`Billing registry: ${billingRegistry.size} tagged sessions, default: ${defaultBilling}`);
+
     // Build Cursor workspace activity map for project attribution
     console.log("Building Cursor workspace activity map...");
     const cursorActivityMap = buildWorkspaceActivityMap();
     console.log(`Found ${cursorActivityMap.workspaces.size} Cursor workspaces`);
 
     let costingUpdated = 0;
+    let billingTagged = 0;
     let projectsAttributed = 0;
     const reprocessed: UsageEvent[] = [];
 
     for (const event of events) {
       let updated = false;
+
+      // Apply billing tag to Claude Code events
+      if (event.source === "claude_code") {
+        const filePath = (event.meta?.file as string) ?? "";
+        const sessionId = path.basename(filePath, ".jsonl");
+        const billing = billingRegistry.get(sessionId) ?? defaultBilling;
+        if (event.meta?.billing !== billing) {
+          event.meta = { ...event.meta, billing };
+          billingTagged++;
+          updated = true;
+        }
+      }
 
       // Re-apply costing
       const oldFinalUsd = event.cost.final_usd;
@@ -393,6 +419,7 @@ program
     }
 
     console.log(`\nChanges:`);
+    console.log(`  Billing tagged: ${billingTagged} events`);
     console.log(`  Costing updated: ${costingUpdated} events`);
     console.log(`  Projects attributed: ${projectsAttributed} Cursor events`);
 
@@ -401,7 +428,7 @@ program
       return;
     }
 
-    if (costingUpdated === 0 && projectsAttributed === 0) {
+    if (costingUpdated === 0 && projectsAttributed === 0 && billingTagged === 0) {
       console.log("\nNo changes needed.");
       return;
     }

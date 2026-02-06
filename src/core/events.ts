@@ -22,7 +22,7 @@ export interface UsageCost {
   reported_usd: number | null;
   estimated_usd: number | null;
   final_usd: number | null;
-  mode: "reported" | "estimated" | "mixed" | "unknown";
+  mode: "reported" | "estimated" | "mixed" | "unknown" | "subscription";
 }
 
 export interface UsageProject {

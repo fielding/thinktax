@@ -276,6 +276,7 @@ Discovers JSONL files under `~/.claude/projects/` and extracts usage from assist
 - Model names
 - Timestamps
 - Project attribution via instance folder
+- Subscription vs API billing detection (via SessionStart hook)
 
 ### Codex CLI
 
@@ -314,9 +315,96 @@ apiKey = "${CURSOR_API_KEY}"
 - Token counts (input, output, cache read/write)
 - Model breakdown (claude-3-5-sonnet, gpt-4o, agent_review, etc.)
 
+## Subscription Billing (Claude Max Plan)
+
+If you use the Claude.ai Max plan ($200/month) alongside API key billing, thinktax can distinguish between the two so subscription-covered usage shows as $0 instead of inflated API-rate estimates.
+
+### How it works
+
+Claude Code's JSONL logs don't record which auth method was used. thinktax solves this with a lightweight Claude Code **SessionStart hook** that checks `ANTHROPIC_API_KEY` at process start:
+
+- **Empty/unset** = OAuth authentication = subscription (Max plan)
+- **Set** = API key = pay-per-token
+
+This pairs naturally with aliases like:
+
+```bash
+alias claude='ANTHROPIC_API_KEY= command claude --dangerously-skip-permissions'   # Max plan
+alias claude-api='command claude --dangerously-skip-permissions'                    # API key
+```
+
+### Setup
+
+**1. Install the hook** (included in `hooks/`):
+
+```bash
+mkdir -p ~/.claude/hooks
+cp hooks/thinktax-billing-tag.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/thinktax-billing-tag.sh
+```
+
+**2. Register in Claude Code settings** (`~/.claude/settings.json`):
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/thinktax-billing-tag.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**3. Add billing config** to your thinktax config:
+
+```toml
+[claude.billing]
+defaultMode = "subscription"  # for sessions before hook was installed
+monthlyCost = 200.00
+plan = "max"
+```
+
+**4. Reprocess existing events** to apply billing tags retroactively:
+
+```bash
+thinktax reprocess
+```
+
+### What you see
+
+```
+Today: $0.00 (in 38915, out 21628) [plan saved $22.09]
+MTD:   $45.23 (in 500000, out 30000) [plan saved $142.49]
+```
+
+- `final_usd = $0` for subscription sessions (covered by flat fee)
+- `estimated_usd` still tracks "what it would have cost" at API rates
+- `[plan saved $X]` shows your subscription savings
+- Use `--breakdown billing` to see subscription vs API split
+
+### Billing registry
+
+The hook writes session tags to `~/.config/thinktax/billing-sessions.jsonl`:
+
+```jsonl
+{"session_id":"abc123","billing":"subscription","ts":"2026-02-05T23:20:00Z"}
+{"session_id":"def456","billing":"api","ts":"2026-02-06T01:15:00Z"}
+```
+
+Sessions without a registry entry fall back to `claude.billing.defaultMode`.
+
 ## Pricing
 
-Pricing data for 58+ models is included in `pricing/models.json`. Models are matched by substring, so variants like `claude-3-5-sonnet-20241022` match `claude-3-5-sonnet`.
+Pricing data for 60+ models is included in `pricing/models.json`. Models are matched by substring, so variants like `claude-3-5-sonnet-20241022` match `claude-3-5-sonnet`.
 
 To update pricing:
 1. Edit `pricing/models.json`

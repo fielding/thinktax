@@ -14,6 +14,8 @@ export interface Totals {
   estimated_usd: number;
   final_usd: number;
   unknown_cost: number;
+  subscription_count: number;
+  subscription_saved_usd: number;
 }
 
 export interface SummaryBreakdowns {
@@ -21,6 +23,7 @@ export interface SummaryBreakdowns {
   source: Record<string, Totals>;
   model: Record<string, Totals>;
   project: Record<string, Totals>;
+  billing: Record<string, Totals>;
 }
 
 export interface Summary {
@@ -42,6 +45,8 @@ export function emptyTotals(): Totals {
     estimated_usd: 0,
     final_usd: 0,
     unknown_cost: 0,
+    subscription_count: 0,
+    subscription_saved_usd: 0,
   };
 }
 
@@ -56,6 +61,10 @@ function addTotals(target: Totals, event: UsageEvent): void {
   target.final_usd += event.cost.final_usd ?? 0;
   if (event.cost.mode === "unknown") {
     target.unknown_cost += 1;
+  }
+  if (event.cost.mode === "subscription") {
+    target.subscription_count += 1;
+    target.subscription_saved_usd += event.cost.estimated_usd ?? 0;
   }
 }
 
@@ -85,6 +94,7 @@ export function aggregateEvents(
     source: {},
     model: {},
     project: {},
+    billing: {},
   };
 
   for (const event of events) {
@@ -99,6 +109,8 @@ export function aggregateEvents(
       bucketKey(event.project.name ?? event.project.id, "unassigned"),
       event
     );
+    const billingMode = (event.meta?.billing as string) ?? "estimate";
+    addBreakdown(breakdowns.billing, billingMode, event);
   }
 
   return {

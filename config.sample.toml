@@ -5,6 +5,14 @@ includeUnknown = false
 [claude]
 projectsDir = "~/.claude/projects"
 
+[claude.billing]
+# Subscription-aware billing for Claude Max plan users.
+# Requires the SessionStart hook — see README for setup.
+# defaultMode: "subscription" (flat-rate plan), "api" (pay-per-token), "estimate" (legacy)
+# defaultMode = "subscription"
+# monthlyCost = 200.00
+# plan = "max"
+
 [codex]
 home = "~/.codex"
 

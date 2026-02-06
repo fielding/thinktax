@@ -20,6 +20,14 @@ export interface ThinktaxConfig {
   };
   claude?: {
     projectsDir?: string;
+    billing?: {
+      /** Default billing mode for sessions without a registry entry. */
+      defaultMode?: "subscription" | "api" | "estimate";
+      /** Monthly subscription cost in USD (e.g. 200 for Max plan). */
+      monthlyCost?: number;
+      /** Plan name for display (e.g. "max"). */
+      plan?: string;
+    };
   };
   codex?: {
     home?: string;
@@ -129,4 +137,9 @@ export function resolveCodexHome(config: ThinktaxConfig): string {
   if (config.codex?.home) return config.codex.home;
   if (process.env.CODEX_HOME) return process.env.CODEX_HOME;
   return path.join(process.env.HOME ?? "", ".codex");
+}
+
+export function resolveBillingSessionsFile(): string {
+  const xdgConfig = process.env.XDG_CONFIG_HOME ?? path.join(process.env.HOME ?? "", ".config");
+  return path.join(xdgConfig, "thinktax", "billing-sessions.jsonl");
 }

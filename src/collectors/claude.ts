@@ -1,14 +1,14 @@
 import path from "node:path";
 import fg from "fast-glob";
 import { DateTime } from "luxon";
-import { ThinktaxConfig, resolveClaudeProjectsDir } from "../core/config.js";
+import { ThinktaxConfig, resolveClaudeProjectsDir, resolveBillingSessionsFile } from "../core/config.js";
 import {
   UsageEvent,
   emptyCost,
   emptyProject,
   createEventId,
+  readJsonl,
 } from "../core/events.js";
-import { readJsonl } from "../core/events.js";
 import { resolveProjectFromMapping } from "../core/projects.js";
 import { debug } from "../core/logger.js";
 
@@ -89,11 +89,42 @@ function shouldSkip(entry: any): boolean {
   return false;
 }
 
+interface BillingEntry {
+  session_id: string;
+  billing: "subscription" | "api";
+  ts: string;
+}
+
+type BillingMode = "subscription" | "api";
+
+async function loadBillingRegistry(): Promise<Map<string, BillingMode>> {
+  const filePath = resolveBillingSessionsFile();
+  const entries = await readJsonl<BillingEntry>(filePath);
+  const map = new Map<string, BillingMode>();
+  for (const entry of entries) {
+    if (entry.session_id && entry.billing) {
+      map.set(entry.session_id, entry.billing);
+    }
+  }
+  return map;
+}
+
+function extractSessionId(entries: any[]): string | null {
+  for (const entry of entries) {
+    if (entry?.sessionId) return entry.sessionId;
+  }
+  return null;
+}
+
 export async function collectClaude(
   config: ThinktaxConfig
 ): Promise<UsageEvent[]> {
   const projectsDir = resolveClaudeProjectsDir(config);
   debug("Claude: scanning", projectsDir);
+
+  const billingRegistry = await loadBillingRegistry();
+  const defaultBilling = config.claude?.billing?.defaultMode ?? "estimate";
+  debug("Claude: loaded", billingRegistry.size, "billing session tags, default:", defaultBilling);
 
   const pattern = path.join(projectsDir, "**/*.jsonl").replace(/\\/g, "/");
   const files = await fg(pattern, { onlyFiles: true, dot: true });
@@ -106,6 +137,13 @@ export async function collectClaude(
     const instanceId = path.basename(path.dirname(filePath));
     const project = resolveProjectFromMapping(config, instanceId, null);
     let fileEvents = 0;
+
+    // Resolve billing mode for this session file
+    const sessionId = extractSessionId(entries);
+    let billing: BillingMode | "estimate" = defaultBilling;
+    if (sessionId && billingRegistry.has(sessionId)) {
+      billing = billingRegistry.get(sessionId)!;
+    }
 
     for (const entry of entries) {
       if (shouldSkip(entry)) continue;
@@ -137,6 +175,7 @@ export async function collectClaude(
         meta: {
           file: filePath,
           type: entry?.type ?? null,
+          billing,
         },
       };
 
@@ -145,7 +184,7 @@ export async function collectClaude(
     }
 
     if (fileEvents > 0) {
-      debug("Claude:", fileEvents, "events from", path.basename(filePath));
+      debug("Claude:", fileEvents, "events from", path.basename(filePath), "billing:", billing);
     }
   }
 

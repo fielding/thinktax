@@ -12,13 +12,26 @@ export function applyCosting(
 ): UsageEvent {
   const updated = { ...event, cost: { ...event.cost } };
 
+  // Always compute the estimate for "what it would have cost" tracking
+  const pricingModel = findPricing(pricing, updated.provider, updated.model);
+  if (pricingModel) {
+    updated.cost.estimated_usd = estimateCostUsd(pricingModel, updated.tokens);
+  }
+
+  // Subscription billing: tokens are covered by flat-rate plan
+  if (updated.meta?.billing === "subscription") {
+    updated.cost.final_usd = 0;
+    updated.cost.mode = "subscription";
+    return updated;
+  }
+
+  // Reported cost from API takes priority
   if (updated.cost.reported_usd !== null) {
     updated.cost.final_usd = updated.cost.reported_usd;
     updated.cost.mode = updated.cost.estimated_usd !== null ? "mixed" : "reported";
     return updated;
   }
 
-  const pricingModel = findPricing(pricing, updated.provider, updated.model);
   if (!pricingModel) {
     updated.cost.mode = "unknown";
     updated.cost.final_usd = options.includeUnknown
@@ -27,9 +40,7 @@ export function applyCosting(
     return updated;
   }
 
-  const estimate = estimateCostUsd(pricingModel, updated.tokens);
-  updated.cost.estimated_usd = estimate;
-  updated.cost.final_usd = estimate;
+  updated.cost.final_usd = updated.cost.estimated_usd;
   updated.cost.mode = "estimated";
   return updated;
 }

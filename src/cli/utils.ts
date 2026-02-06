@@ -6,7 +6,11 @@ export function formatUsd(value: number | null | undefined): string {
 }
 
 export function formatTotalsLine(label: string, totals: Totals): string {
-  return `${label}: ${formatUsd(totals.final_usd)} (in ${totals.tokens_in}, out ${totals.tokens_out})`;
+  let line = `${label}: ${formatUsd(totals.final_usd)} (in ${totals.tokens_in}, out ${totals.tokens_out})`;
+  if (totals.subscription_count > 0 && totals.subscription_saved_usd > 0) {
+    line += ` [plan saved ${formatUsd(totals.subscription_saved_usd)}]`;
+  }
+  return line;
 }
 
 export function formatBreakdown(
