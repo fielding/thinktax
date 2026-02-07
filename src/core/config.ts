@@ -72,6 +72,14 @@ export interface ThinktaxConfig {
     adminKey?: string;
     usageApiBase?: string;
   };
+  openclaw?: {
+    sessionsDir?: string;
+    billing?: {
+      defaultMode?: "subscription" | "api" | "estimate";
+      monthlyCost?: number;
+      plan?: string;
+    };
+  };
   projects?: {
     mappings?: ProjectMapping[];
   };
@@ -131,6 +139,12 @@ export function resolveCursorTeamUrl(config: ThinktaxConfig): string | null {
 export function resolveClaudeProjectsDir(config: ThinktaxConfig): string {
   if (config.claude?.projectsDir) return config.claude.projectsDir;
   return path.join(process.env.HOME ?? "", ".claude", "projects");
+}
+
+export function resolveOpenClawSessionsDir(config: ThinktaxConfig): string {
+  if (config.openclaw?.sessionsDir) return config.openclaw.sessionsDir;
+  const { dataDir } = getPaths();
+  return path.join(dataDir, "openclaw-sessions");
 }
 
 export function resolveCodexHome(config: ThinktaxConfig): string {

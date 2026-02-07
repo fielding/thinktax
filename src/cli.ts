@@ -9,6 +9,8 @@ import * as vegaLite from "vega-lite";
 import { collectClaude } from "./collectors/claude.js";
 import { collectCodex } from "./collectors/codex.js";
 import { collectCursor, buildWorkspaceActivityMap, findProjectForTimestamp } from "./collectors/cursor.js";
+import { collectOpenClaw } from "./collectors/openclaw.js";
+import { collectApprentice } from "./collectors/apprentice.js";
 import { loadConfig, resolveTimezone, resolveBillingSessionsFile } from "./core/config.js";
 import { applyCosting } from "./core/cost.js";
 import { loadSummaries, loadEventsForRange, aggregateEvents } from "./core/aggregate.js";
@@ -60,7 +62,7 @@ program
     const includeUnknown = config.ui?.includeUnknown ?? false;
 
     debug("Starting collectors...");
-    const [claudeEvents, codexEvents, cursorEvents] = await Promise.all([
+    const [claudeEvents, codexEvents, cursorEvents, openclawEvents, apprenticeEvents] = await Promise.all([
       collectClaude(config).then((events) => {
         debug("Claude collector returned", events.length, "events");
         return events;
@@ -73,9 +75,17 @@ program
         debug("Cursor collector returned", events.length, "events");
         return events;
       }),
+      collectOpenClaw(config).then((events) => {
+        debug("OpenClaw collector returned", events.length, "events");
+        return events;
+      }),
+      collectApprentice(config).then((events) => {
+        debug("Apprentice collector returned", events.length, "events");
+        return events;
+      }),
     ]);
 
-    const rawEvents = [...claudeEvents, ...codexEvents, ...cursorEvents];
+    const rawEvents = [...claudeEvents, ...codexEvents, ...cursorEvents, ...openclawEvents, ...apprenticeEvents];
     debug("Total raw events:", rawEvents.length);
 
     const costed = rawEvents.map((event) =>
@@ -92,17 +102,21 @@ program
       claude: new Date().toISOString(),
       codex: new Date().toISOString(),
       cursor: new Date().toISOString(),
+      openclaw: new Date().toISOString(),
+      apprentice: new Date().toISOString(),
     };
     sync.counts = {
       ...(sync.counts ?? {}),
       claude: claudeEvents.length,
       codex: codexEvents.length,
       cursor: cursorEvents.length,
+      openclaw: openclawEvents.length,
+      apprentice: apprenticeEvents.length,
     };
     writeSyncState(sync);
 
     console.log(
-      `Collected ${rawEvents.length} events (${written} new). Claude ${claudeEvents.length}, Codex ${codexEvents.length}, Cursor ${cursorEvents.length}.`
+      `Collected ${rawEvents.length} events (${written} new). Claude ${claudeEvents.length}, Codex ${codexEvents.length}, Cursor ${cursorEvents.length}, OpenClaw ${openclawEvents.length}, Apprentice ${apprenticeEvents.length}.`
     );
   });
 
@@ -390,6 +404,16 @@ program
         const billing = billingRegistry.get(sessionId) ?? defaultBilling;
         if (event.meta?.billing !== billing) {
           event.meta = { ...event.meta, billing };
+          billingTagged++;
+          updated = true;
+        }
+      }
+
+      // Apply billing tag to OpenClaw events
+      if (event.source === "openclaw") {
+        const openclawBilling = config.openclaw?.billing?.defaultMode ?? "estimate";
+        if (event.meta?.billing !== openclawBilling) {
+          event.meta = { ...event.meta, billing: openclawBilling };
           billingTagged++;
           updated = true;
         }

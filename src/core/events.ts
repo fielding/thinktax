@@ -7,9 +7,11 @@ export type UsageSource =
   | "cursor_ide"
   | "cursor_agent_cli"
   | "claude_code"
-  | "codex_cli";
+  | "codex_cli"
+  | "openclaw"
+  | "apprentice";
 
-export type UsageProvider = "cursor" | "anthropic" | "openai";
+export type UsageProvider = "cursor" | "anthropic" | "openai" | "moonshot";
 
 export interface UsageTokens {
   in: number;

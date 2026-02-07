@@ -1,6 +1,6 @@
 # thinktax
 
-A multi-provider LLM cost tracker for developers using Claude Code, Cursor, and Codex CLI.
+A multi-provider LLM cost tracker for developers using Claude Code, Cursor, Codex CLI, OpenClaw, and Apprentice.
 
 Track your AI coding assistant spending across all your tools in one place, with timezone-aware reporting, per-project attribution, and macOS menu bar integration via Sketchybar.
 
@@ -9,7 +9,7 @@ Track your AI coding assistant spending across all your tools in one place, with
 
 ## Features
 
-- **Multi-provider support** - Claude Code, Cursor (Team API), Codex CLI
+- **Multi-provider support** - Claude Code, Cursor (Team API), Codex CLI, OpenClaw, Apprentice
 - **Actual-spend-first philosophy** - Uses reported costs when available, falls back to estimates
 - **Timezone-aware reporting** - Today/MTD/YTD windows respect your local timezone
 - **Multiple breakdowns** - By provider, project, model, or source
@@ -53,7 +53,7 @@ Collect latest usage from all configured providers and write normalized events.
 
 ```bash
 thinktax refresh
-# Collected 1234 events (56 new). Claude 800, Codex 400, Cursor 34.
+# Collected 1234 events (56 new). Claude 800, Codex 400, Cursor 34, OpenClaw 0, Apprentice 0.
 ```
 
 ### `thinktax status`
@@ -315,6 +315,33 @@ apiKey = "${CURSOR_API_KEY}"
 - Token counts (input, output, cache read/write)
 - Model breakdown (claude-3-5-sonnet, gpt-4o, agent_review, etc.)
 
+### OpenClaw
+
+Parses session JSONL files synced from OpenClaw (Kimi-based coding assistant). Sessions are discovered in the configured `sessionsDir` or the default data directory.
+
+**Supported data:**
+- Token counts (input, output, cache read/write)
+- Model names and provider attribution
+- Subscription billing via `[openclaw.billing]` config
+
+```toml
+[openclaw]
+# sessionsDir = "~/Library/Application Support/thinktax/data/openclaw-sessions"
+
+[openclaw.billing]
+defaultMode = "subscription"
+plan = "kimi"
+```
+
+### Apprentice
+
+Parses usage logs from `~/.apprentice/usage/`. All Apprentice sessions are billed as API usage by default.
+
+**Supported data:**
+- Token counts per request
+- Model and provider attribution
+- Request latency
+
 ## Subscription Billing (Claude Max Plan)
 
 If you use the Claude.ai Max plan ($200/month) alongside API key billing, thinktax can distinguish between the two so subscription-covered usage shows as $0 instead of inflated API-rate estimates.
@@ -368,7 +395,7 @@ chmod +x ~/.claude/hooks/thinktax-billing-tag.sh
 
 ```toml
 [claude.billing]
-defaultMode = "subscription"  # for sessions before hook was installed
+defaultMode = "subscription"  # Max plan users: subscription is the correct default
 monthlyCost = 200.00
 plan = "max"
 ```

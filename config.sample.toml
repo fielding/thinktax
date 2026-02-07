@@ -46,6 +46,11 @@ etagTtlMinutes = 15
 # transcriptsDir = "$HOME/.cursor/projects"
 # estimateModel = "gpt-4o-mini"
 
+[openclaw]
+# Directory where OpenClaw session JSONL files are synced (via Syncthing).
+# Defaults to <data-dir>/openclaw-sessions
+# sessionsDir = "~/Library/Application Support/thinktax/data/openclaw-sessions"
+
 [[projects.mappings]]
 match.instanceId = "claude-instance-folder"
 id = "project-foo"
