@@ -11,6 +11,8 @@ import { collectCodex } from "./collectors/codex.js";
 import { collectCursor, buildWorkspaceActivityMap, findProjectForTimestamp } from "./collectors/cursor.js";
 import { collectOpenClaw } from "./collectors/openclaw.js";
 import { collectApprentice } from "./collectors/apprentice.js";
+import { collectGlean } from "./collectors/glean.js";
+import { collectReviewCrew } from "./collectors/review-crew.js";
 import { loadConfig, resolveTimezone, resolveBillingSessionsFile } from "./core/config.js";
 import { applyCosting } from "./core/cost.js";
 import { loadSummaries, loadEventsForRange, aggregateEvents } from "./core/aggregate.js";
@@ -62,7 +64,7 @@ program
     const includeUnknown = config.ui?.includeUnknown ?? false;
 
     debug("Starting collectors...");
-    const [claudeEvents, codexEvents, cursorEvents, openclawEvents, apprenticeEvents] = await Promise.all([
+    const [claudeEvents, codexEvents, cursorEvents, openclawEvents, apprenticeEvents, gleanEvents, reviewCrewEvents] = await Promise.all([
       collectClaude(config).then((events) => {
         debug("Claude collector returned", events.length, "events");
         return events;
@@ -83,9 +85,17 @@ program
         debug("Apprentice collector returned", events.length, "events");
         return events;
       }),
+      collectGlean(config).then((events) => {
+        debug("Glean collector returned", events.length, "events");
+        return events;
+      }),
+      collectReviewCrew(config).then((events) => {
+        debug("ReviewCrew collector returned", events.length, "events");
+        return events;
+      }),
     ]);
 
-    const rawEvents = [...claudeEvents, ...codexEvents, ...cursorEvents, ...openclawEvents, ...apprenticeEvents];
+    const rawEvents = [...claudeEvents, ...codexEvents, ...cursorEvents, ...openclawEvents, ...apprenticeEvents, ...gleanEvents, ...reviewCrewEvents];
     debug("Total raw events:", rawEvents.length);
 
     const costed = rawEvents.map((event) =>
@@ -104,6 +114,8 @@ program
       cursor: new Date().toISOString(),
       openclaw: new Date().toISOString(),
       apprentice: new Date().toISOString(),
+      glean: new Date().toISOString(),
+      reviewCrew: new Date().toISOString(),
     };
     sync.counts = {
       ...(sync.counts ?? {}),
@@ -112,11 +124,13 @@ program
       cursor: cursorEvents.length,
       openclaw: openclawEvents.length,
       apprentice: apprenticeEvents.length,
+      glean: gleanEvents.length,
+      reviewCrew: reviewCrewEvents.length,
     };
     writeSyncState(sync);
 
     console.log(
-      `Collected ${rawEvents.length} events (${written} new). Claude ${claudeEvents.length}, Codex ${codexEvents.length}, Cursor ${cursorEvents.length}, OpenClaw ${openclawEvents.length}, Apprentice ${apprenticeEvents.length}.`
+      `Collected ${rawEvents.length} events (${written} new). Claude ${claudeEvents.length}, Codex ${codexEvents.length}, Cursor ${cursorEvents.length}, OpenClaw ${openclawEvents.length}, Apprentice ${apprenticeEvents.length}, Glean ${gleanEvents.length}, ReviewCrew ${reviewCrewEvents.length}.`
     );
   });
 

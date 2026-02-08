@@ -80,6 +80,12 @@ export interface ThinktaxConfig {
       plan?: string;
     };
   };
+  glean?: {
+    usageDir?: string;
+  };
+  reviewCrew?: {
+    historyDir?: string;
+  };
   projects?: {
     mappings?: ProjectMapping[];
   };
@@ -151,6 +157,19 @@ export function resolveCodexHome(config: ThinktaxConfig): string {
   if (config.codex?.home) return config.codex.home;
   if (process.env.CODEX_HOME) return process.env.CODEX_HOME;
   return path.join(process.env.HOME ?? "", ".codex");
+}
+
+export function resolveReviewCrewHistoryDir(config: ThinktaxConfig): string {
+  if (config.reviewCrew?.historyDir) return config.reviewCrew.historyDir;
+  return path.join(process.env.HOME ?? "", ".review-crew", "history");
+}
+
+export function resolveGleanUsageDir(config: ThinktaxConfig): string {
+  if (config.glean?.usageDir) return config.glean.usageDir;
+  const home = process.env.HOME ?? "";
+  // Glean is a Python app that uses XDG paths even on macOS.
+  const stateBase = process.env.XDG_STATE_HOME ?? path.join(home, ".local", "state");
+  return path.join(stateBase, "glean", "usage");
 }
 
 export function resolveBillingSessionsFile(): string {

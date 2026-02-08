@@ -9,7 +9,9 @@ export type UsageSource =
   | "claude_code"
   | "codex_cli"
   | "openclaw"
-  | "apprentice";
+  | "apprentice"
+  | "glean"
+  | "review_crew";
 
 export type UsageProvider = "cursor" | "anthropic" | "openai" | "moonshot";
 
