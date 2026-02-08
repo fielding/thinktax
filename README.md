@@ -1,6 +1,6 @@
 # thinktax
 
-A multi-provider LLM cost tracker for developers using Claude Code, Cursor, Codex CLI, OpenClaw, and Apprentice.
+A multi-provider LLM cost tracker for developers using Claude Code, Cursor, Codex CLI, and more.
 
 Track your AI coding assistant spending across all your tools in one place, with timezone-aware reporting, per-project attribution, and macOS menu bar integration via Sketchybar.
 
@@ -9,7 +9,7 @@ Track your AI coding assistant spending across all your tools in one place, with
 
 ## Features
 
-- **Multi-provider support** - Claude Code, Cursor (Team API), Codex CLI, OpenClaw, Apprentice
+- **Multi-provider support** - Claude Code, Cursor, Codex CLI, Glean, Review Crew, OpenClaw, Apprentice
 - **Actual-spend-first philosophy** - Uses reported costs when available, falls back to estimates
 - **Timezone-aware reporting** - Today/MTD/YTD windows respect your local timezone
 - **Multiple breakdowns** - By provider, project, model, or source
@@ -53,7 +53,7 @@ Collect latest usage from all configured providers and write normalized events.
 
 ```bash
 thinktax refresh
-# Collected 1234 events (56 new). Claude 800, Codex 400, Cursor 34, OpenClaw 0, Apprentice 0.
+# Collected 1234 events (56 new). Claude 800, Codex 400, Cursor 34, OpenClaw 0, Apprentice 0, Glean 0, ReviewCrew 0.
 ```
 
 ### `thinktax status`
@@ -341,6 +341,33 @@ Parses usage logs from `~/.apprentice/usage/`. All Apprentice sessions are bille
 - Token counts per request
 - Model and provider attribution
 - Request latency
+
+### Glean
+
+Tracks API costs from [Glean](https://github.com/fielding/glean), an automated AI session logger that summarizes coding sessions into Obsidian daily notes. Glean makes LLM calls (typically Claude Haiku) to generate summaries, and logs per-call usage to `~/.local/state/glean/usage/`.
+
+**Supported data:**
+- Token counts per summarization call
+- Model and provider attribution
+- Summarization reason (idle, manual, lock, sleep)
+
+```toml
+[glean]
+# usageDir = "~/.local/state/glean/usage"  # default
+```
+
+### Review Crew
+
+Tracks summarizer costs from [Review Crew](https://github.com/fielding/review-crew), a multi-agent PR review tool that runs Claude, GPT, and Gemini reviewers in parallel. Only the orchestrator's summarizer call is collected here — reviewer agent costs are already captured by the Claude Code and Cursor collectors respectively.
+
+**Supported data:**
+- Exact token counts and cost for the summarizer call
+- PR metadata (repo, PR number, title, verdict)
+
+```toml
+[reviewCrew]
+# historyDir = "~/.review-crew/history"  # default
+```
 
 ## Subscription Billing (Claude Max Plan)
 
