@@ -11,7 +11,8 @@ export type UsageSource =
   | "openclaw"
   | "apprentice"
   | "glean"
-  | "review_crew";
+  | "review_crew"
+  | "yabai_organize";
 
 export type UsageProvider = "cursor" | "anthropic" | "openai" | "moonshot";
 

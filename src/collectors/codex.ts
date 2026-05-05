@@ -114,7 +114,8 @@ export async function collectCodex(
 ): Promise<UsageEvent[]> {
   const codexHome = resolveCodexHome(config);
   const sessionsDir = path.join(codexHome, "sessions");
-  debug("Codex: scanning", sessionsDir);
+  const billing = config.codex?.billing?.defaultMode ?? "estimate";
+  debug("Codex: scanning", sessionsDir, "billing:", billing);
 
   const pattern = path.join(sessionsDir, "**/*.jsonl").replace(/\\/g, "/");
   const files = await fg(pattern, { onlyFiles: true, dot: true });
@@ -223,6 +224,7 @@ export async function collectCodex(
         meta: {
           file: filePath,
           session: instanceId,
+          billing,
         },
       };
 

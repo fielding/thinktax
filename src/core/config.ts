@@ -31,6 +31,11 @@ export interface ThinktaxConfig {
   };
   codex?: {
     home?: string;
+    billing?: {
+      defaultMode?: "subscription" | "api" | "estimate";
+      monthlyCost?: number;
+      plan?: string;
+    };
   };
   cursor?: {
     dashboard?: {
@@ -85,6 +90,9 @@ export interface ThinktaxConfig {
   };
   reviewCrew?: {
     historyDir?: string;
+  };
+  yabaiOrganize?: {
+    usageDir?: string;
   };
   projects?: {
     mappings?: ProjectMapping[];
@@ -170,6 +178,11 @@ export function resolveGleanUsageDir(config: ThinktaxConfig): string {
   // Glean is a Python app that uses XDG paths even on macOS.
   const stateBase = process.env.XDG_STATE_HOME ?? path.join(home, ".local", "state");
   return path.join(stateBase, "glean", "usage");
+}
+
+export function resolveYabaiOrganizeUsageDir(config: ThinktaxConfig): string {
+  if (config.yabaiOrganize?.usageDir) return config.yabaiOrganize.usageDir;
+  return path.join(process.env.HOME ?? "", ".local", "share", "yabai-organize");
 }
 
 export function resolveBillingSessionsFile(): string {

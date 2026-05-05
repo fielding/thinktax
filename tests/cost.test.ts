@@ -41,8 +41,9 @@ const mockPricing: PricingTable = {
 };
 
 describe("applyCosting", () => {
-  it("uses reported cost when available", () => {
+  it("uses reported cost when available (no pricing match)", () => {
     const event = buildEvent({
+      model: "unknown-model",
       cost: { ...emptyCost(), reported_usd: 0.05 },
     });
 

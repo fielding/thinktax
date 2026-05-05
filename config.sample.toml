@@ -16,6 +16,13 @@ projectsDir = "~/.claude/projects"
 [codex]
 home = "~/.codex"
 
+[codex.billing]
+# Billing mode for Codex CLI usage.
+# "subscription" for ChatGPT Plus/Team/Enterprise plans, "api" for pay-per-token, "estimate" (default)
+# defaultMode = "subscription"
+# monthlyCost = 200.00
+# plan = "pro"
+
 [cursor.dashboard]
 # Auth is auto-extracted from Cursor's state.vscdb - no manual config needed!
 # Override only if auto-detection doesn't work:
@@ -50,6 +57,11 @@ etagTtlMinutes = 15
 # Directory where OpenClaw session JSONL files are synced (via Syncthing).
 # Defaults to <data-dir>/openclaw-sessions
 # sessionsDir = "~/Library/Application Support/thinktax/data/openclaw-sessions"
+
+[yabaiOrganize]
+# Directory containing usage.jsonl
+# Defaults to ~/.local/share/yabai-organize
+# usageDir = "~/.local/share/yabai-organize"
 
 [[projects.mappings]]
 match.instanceId = "claude-instance-folder"
