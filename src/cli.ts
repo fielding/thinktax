@@ -13,9 +13,12 @@ import { collectOpenClaw } from "./collectors/openclaw.js";
 import { collectApprentice } from "./collectors/apprentice.js";
 import { collectGlean } from "./collectors/glean.js";
 import { collectReviewCrew } from "./collectors/review-crew.js";
+import { collectYabaiOrganize } from "./collectors/yabai-organize.js";
 import { loadConfig, resolveTimezone, resolveBillingSessionsFile } from "./core/config.js";
+import { applyBillingMetadata } from "./core/billing-metadata.js";
+import type { BillingConfidence, BillingMode, BillingSource } from "./core/billing-metadata.js";
 import { applyCosting } from "./core/cost.js";
-import { loadSummaries, loadEventsForRange, aggregateEvents } from "./core/aggregate.js";
+import { loadSummaries, loadEventsForRange, aggregateEvents, isWorkSource } from "./core/aggregate.js";
 import { getPaths, ensurePaths } from "./core/paths.js";
 import { loadPricingTable } from "./core/pricing.js";
 import { readSyncState, writeSyncState } from "./core/state.js";
@@ -29,6 +32,19 @@ type BreakdownKey = "provider" | "project" | "model" | "source" | "billing";
 
 function isBreakdownKey(value: string): value is BreakdownKey {
   return ["provider", "project", "model", "source", "billing"].includes(value);
+}
+
+function billingMetaMatches(
+  event: UsageEvent,
+  mode: BillingMode,
+  source: BillingSource,
+  confidence: BillingConfidence
+): boolean {
+  return (
+    event.meta?.billing === mode &&
+    event.meta?.billing_source === source &&
+    event.meta?.billing_confidence === confidence
+  );
 }
 
 const program = new Command();
@@ -64,7 +80,7 @@ program
     const includeUnknown = config.ui?.includeUnknown ?? false;
 
     debug("Starting collectors...");
-    const [claudeEvents, codexEvents, cursorEvents, openclawEvents, apprenticeEvents, gleanEvents, reviewCrewEvents] = await Promise.all([
+    const [claudeEvents, codexEvents, cursorEvents, openclawEvents, apprenticeEvents, gleanEvents, reviewCrewEvents, yabaiOrganizeEvents] = await Promise.all([
       collectClaude(config).then((events) => {
         debug("Claude collector returned", events.length, "events");
         return events;
@@ -93,9 +109,13 @@ program
         debug("ReviewCrew collector returned", events.length, "events");
         return events;
       }),
+      collectYabaiOrganize(config).then((events) => {
+        debug("YabaiOrganize collector returned", events.length, "events");
+        return events;
+      }),
     ]);
 
-    const rawEvents = [...claudeEvents, ...codexEvents, ...cursorEvents, ...openclawEvents, ...apprenticeEvents, ...gleanEvents, ...reviewCrewEvents];
+    const rawEvents = [...claudeEvents, ...codexEvents, ...cursorEvents, ...openclawEvents, ...apprenticeEvents, ...gleanEvents, ...reviewCrewEvents, ...yabaiOrganizeEvents];
     debug("Total raw events:", rawEvents.length);
 
     const costed = rawEvents.map((event) =>
@@ -116,6 +136,7 @@ program
       apprentice: new Date().toISOString(),
       glean: new Date().toISOString(),
       reviewCrew: new Date().toISOString(),
+      yabaiOrganize: new Date().toISOString(),
     };
     sync.counts = {
       ...(sync.counts ?? {}),
@@ -126,11 +147,12 @@ program
       apprentice: apprenticeEvents.length,
       glean: gleanEvents.length,
       reviewCrew: reviewCrewEvents.length,
+      yabaiOrganize: yabaiOrganizeEvents.length,
     };
     writeSyncState(sync);
 
     console.log(
-      `Collected ${rawEvents.length} events (${written} new). Claude ${claudeEvents.length}, Codex ${codexEvents.length}, Cursor ${cursorEvents.length}, OpenClaw ${openclawEvents.length}, Apprentice ${apprenticeEvents.length}, Glean ${gleanEvents.length}, ReviewCrew ${reviewCrewEvents.length}.`
+      `Collected ${rawEvents.length} events (${written} new). Claude ${claudeEvents.length}, Codex ${codexEvents.length}, Cursor ${cursorEvents.length}, OpenClaw ${openclawEvents.length}, Apprentice ${apprenticeEvents.length}, Glean ${gleanEvents.length}, ReviewCrew ${reviewCrewEvents.length}, YabaiOrganize ${yabaiOrganizeEvents.length}.`
     );
   });
 
@@ -143,13 +165,18 @@ program
   .option("--mtd", "only show month-to-date")
   .option("--ytd", "only show year-to-date")
   .option("--all", "only show all-time")
+  .option("--work", "only include work sources (excludes OpenClaw etc.)")
   .action(async (cmd) => {
     const options = program.opts();
     const { config } = loadConfig(options.config);
     const timezone = options.timezone ?? resolveTimezone(config);
     const now = DateTime.now().setZone(timezone);
+    const workFilter = cmd.work
+      ? (e: UsageEvent) => isWorkSource(e.source)
+      : undefined;
 
-    const summaries = await loadSummaries(timezone, now);
+    const summaries = await loadSummaries(timezone, now, workFilter);
+    const label = cmd.work ? " (work)" : "";
 
     if (cmd.json) {
       const payload = {
@@ -173,7 +200,7 @@ program
       typeof cmd.breakdown === "string" ? cmd.breakdown : null;
 
     if (showToday) {
-      console.log(formatTotalsLine("Today", summaries.today.totals));
+      console.log(formatTotalsLine(`Today${label}`, summaries.today.totals));
       if (breakdownKey && isBreakdownKey(breakdownKey)) {
         const lines = formatBreakdown(
           summaries.today.breakdowns[breakdownKey] ?? {},
@@ -184,7 +211,7 @@ program
     }
 
     if (showMtd) {
-      console.log(formatTotalsLine("MTD", summaries.mtd.totals));
+      console.log(formatTotalsLine(`MTD${label}`, summaries.mtd.totals));
       if (breakdownKey && isBreakdownKey(breakdownKey)) {
         const lines = formatBreakdown(
           summaries.mtd.breakdowns[breakdownKey] ?? {},
@@ -195,7 +222,7 @@ program
     }
 
     if (showYtd) {
-      console.log(formatTotalsLine("YTD", summaries.ytd.totals));
+      console.log(formatTotalsLine(`YTD${label}`, summaries.ytd.totals));
       if (breakdownKey && isBreakdownKey(breakdownKey)) {
         const lines = formatBreakdown(
           summaries.ytd.breakdowns[breakdownKey] ?? {},
@@ -206,7 +233,7 @@ program
     }
 
     if (showAll) {
-      console.log(formatTotalsLine("All Time", summaries.all.totals));
+      console.log(formatTotalsLine(`All Time${label}`, summaries.all.totals));
       if (breakdownKey && isBreakdownKey(breakdownKey)) {
         const lines = formatBreakdown(
           summaries.all.breakdowns[breakdownKey] ?? {},
@@ -221,12 +248,16 @@ program
   .command("sketchybar")
   .description("Output Sketchybar payload")
   .option("--format <format>", "plain|json", "plain")
+  .option("--work", "only include work sources (excludes OpenClaw etc.)")
   .action(async (cmd) => {
     const options = program.opts();
     const { config } = loadConfig(options.config);
     const timezone = options.timezone ?? resolveTimezone(config);
     const now = DateTime.now().setZone(timezone);
-    const { today, mtd } = await loadSummaries(timezone, now);
+    const workFilter = cmd.work
+      ? (e: UsageEvent) => isWorkSource(e.source)
+      : undefined;
+    const { today, mtd } = await loadSummaries(timezone, now, workFilter);
 
     const todayProvider = today.breakdowns.provider;
     const todayCursor = todayProvider.cursor?.final_usd ?? 0;
@@ -291,12 +322,17 @@ program
   .option("--mtd", "only show month-to-date")
   .option("--ytd", "only show year-to-date")
   .option("--all", "only show all-time")
+  .option("--work", "only include work sources (excludes OpenClaw etc.)")
   .action(async (cmd) => {
     const options = program.opts();
     const { config } = loadConfig(options.config);
     const timezone = options.timezone ?? resolveTimezone(config);
     const now = DateTime.now().setZone(timezone);
-    const summaries = await loadSummaries(timezone, now);
+    const workFilter = cmd.work
+      ? (e: UsageEvent) => isWorkSource(e.source)
+      : undefined;
+    const summaries = await loadSummaries(timezone, now, workFilter);
+    const label = cmd.work ? " (work)" : "";
 
     if (cmd.format === "json") {
       console.log(JSON.stringify(summaries, null, 2));
@@ -311,28 +347,28 @@ program
     const showAll = explicit ? cmd.all : false;
 
     if (showToday) {
-      console.log(formatTotalsLine("Today", summaries.today.totals));
+      console.log(formatTotalsLine(`Today${label}`, summaries.today.totals));
       formatBreakdown(summaries.today.breakdowns.provider).forEach((line) =>
         console.log(`  ${line}`)
       );
     }
 
     if (showMtd) {
-      console.log(formatTotalsLine("MTD", summaries.mtd.totals));
+      console.log(formatTotalsLine(`MTD${label}`, summaries.mtd.totals));
       formatBreakdown(summaries.mtd.breakdowns.provider).forEach((line) =>
         console.log(`  ${line}`)
       );
     }
 
     if (showYtd) {
-      console.log(formatTotalsLine("YTD", summaries.ytd.totals));
+      console.log(formatTotalsLine(`YTD${label}`, summaries.ytd.totals));
       formatBreakdown(summaries.ytd.breakdowns.provider).forEach((line) =>
         console.log(`  ${line}`)
       );
     }
 
     if (showAll) {
-      console.log(formatTotalsLine("All Time", summaries.all.totals));
+      console.log(formatTotalsLine(`All Time${label}`, summaries.all.totals));
       formatBreakdown(summaries.all.breakdowns.provider).forEach((line) =>
         console.log(`  ${line}`)
       );
@@ -389,10 +425,10 @@ program
     // Load billing registry for Claude Code sessions
     const billingFile = resolveBillingSessionsFile();
     const billingEntries = await readJsonl<{ session_id: string; billing: string }>(billingFile);
-    const billingRegistry = new Map<string, string>();
+    const billingRegistry = new Map<string, BillingMode>();
     for (const entry of billingEntries) {
       if (entry.session_id && entry.billing) {
-        billingRegistry.set(entry.session_id, entry.billing);
+        billingRegistry.set(entry.session_id, entry.billing as BillingMode);
       }
     }
     const defaultBilling = config.claude?.billing?.defaultMode ?? "estimate";
@@ -415,9 +451,30 @@ program
       if (event.source === "claude_code") {
         const filePath = (event.meta?.file as string) ?? "";
         const sessionId = path.basename(filePath, ".jsonl");
-        const billing = billingRegistry.get(sessionId) ?? defaultBilling;
-        if (event.meta?.billing !== billing) {
-          event.meta = { ...event.meta, billing };
+        const registryBilling = billingRegistry.get(sessionId);
+        const billing = registryBilling ?? defaultBilling;
+        const billingSource: BillingSource = registryBilling ? "session_registry" : "config_default";
+        const billingConfidence: BillingConfidence = registryBilling ? "high" : "default";
+        if (!billingMetaMatches(event, billing, billingSource, billingConfidence)) {
+          event.meta = applyBillingMetadata(event, {
+            mode: billing,
+            source: billingSource,
+            confidence: billingConfidence,
+          }).meta;
+          billingTagged++;
+          updated = true;
+        }
+      }
+
+      // Apply billing tag to Codex events
+      if (event.source === "codex_cli") {
+        const codexBilling = config.codex?.billing?.defaultMode ?? "estimate";
+        if (!billingMetaMatches(event, codexBilling, "config_default", "default")) {
+          event.meta = applyBillingMetadata(event, {
+            mode: codexBilling,
+            source: "config_default",
+            confidence: "default",
+          }).meta;
           billingTagged++;
           updated = true;
         }
@@ -426,8 +483,12 @@ program
       // Apply billing tag to OpenClaw events
       if (event.source === "openclaw") {
         const openclawBilling = config.openclaw?.billing?.defaultMode ?? "estimate";
-        if (event.meta?.billing !== openclawBilling) {
-          event.meta = { ...event.meta, billing: openclawBilling };
+        if (!billingMetaMatches(event, openclawBilling, "config_default", "default")) {
+          event.meta = applyBillingMetadata(event, {
+            mode: openclawBilling,
+            source: "config_default",
+            confidence: "default",
+          }).meta;
           billingTagged++;
           updated = true;
         }
@@ -485,6 +546,7 @@ program
   .option("--sparkline", "compact sparkline output")
   .option("--image [path]", "generate PNG image (default: /tmp/thinktax-graph.png)")
   .option("--open", "open generated image (macOS)")
+  .option("--work", "only include work sources (excludes OpenClaw etc.)")
   .action(async (cmd) => {
     const options = program.opts();
     const { config } = loadConfig(options.config);
@@ -496,7 +558,12 @@ program
     const providerFilter = cmd.provider as UsageProvider | undefined;
 
     const startDate = now.minus({ days: days - 1 }).startOf("day");
-    const events = await loadEventsForRange(timezone, startDate, now);
+    let events = await loadEventsForRange(timezone, startDate, now);
+
+    // Filter to work sources if --work flag is set
+    if (cmd.work) {
+      events = events.filter((e) => isWorkSource(e.source));
+    }
 
     // Filter by provider if specified
     const filtered = providerFilter

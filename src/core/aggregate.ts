@@ -1,8 +1,24 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DateTime } from "luxon";
-import { readJsonl, UsageEvent, UsageProvider } from "./events.js";
+import { readJsonl, UsageEvent, UsageProvider, UsageSource } from "./events.js";
 import { getPaths } from "./paths.js";
+
+/** Sources that count as "work" for the --work filter. */
+const WORK_SOURCES: ReadonlySet<UsageSource> = new Set<UsageSource>([
+  "claude_code",
+  "cursor_ide",
+  "cursor_agent_cli",
+  "codex_cli",
+  "apprentice",
+  "glean",
+  "review_crew",
+  "yabai_organize",
+]);
+
+export function isWorkSource(source: UsageSource): boolean {
+  return WORK_SOURCES.has(source);
+}
 
 export interface Totals {
   count: number;
@@ -68,6 +84,11 @@ function addTotals(target: Totals, event: UsageEvent): void {
   }
 }
 
+/** Display names for source breakdown labels. */
+const SOURCE_DISPLAY: Record<string, string> = {
+  openclaw: "sedge",
+};
+
 function bucketKey(value: string | null, fallback: string): string {
   return value && value.length > 0 ? value : fallback;
 }
@@ -102,7 +123,7 @@ export function aggregateEvents(
     if (eventTime < from || eventTime > to) continue;
     addTotals(totals, event);
     addBreakdown(breakdowns.provider, event.provider, event);
-    addBreakdown(breakdowns.source, event.source, event);
+    addBreakdown(breakdowns.source, SOURCE_DISPLAY[event.source] ?? event.source, event);
     addBreakdown(breakdowns.model, bucketKey(event.model, "unknown"), event);
     addBreakdown(
       breakdowns.project,
@@ -188,13 +209,15 @@ export async function loadAllEvents(
 
 export async function loadSummaries(
   timezone: string,
-  now: DateTime
+  now: DateTime,
+  filter?: (event: UsageEvent) => boolean
 ): Promise<{ today: Summary; mtd: Summary; ytd: Summary; all: Summary }> {
   const startOfDay = now.setZone(timezone).startOf("day");
   const startOfMonth = now.setZone(timezone).startOf("month");
   const startOfYear = now.setZone(timezone).startOf("year");
 
-  const { events, earliest } = await loadAllEvents(timezone, now);
+  const { events: rawEvents, earliest } = await loadAllEvents(timezone, now);
+  const events = filter ? rawEvents.filter(filter) : rawEvents;
   const today = aggregateEvents(events, timezone, startOfDay, now);
   const mtd = aggregateEvents(events, timezone, startOfMonth, now);
   const ytd = aggregateEvents(events, timezone, startOfYear, now);
