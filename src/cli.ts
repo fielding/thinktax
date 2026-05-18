@@ -15,6 +15,8 @@ import { collectGlean } from "./collectors/glean.js";
 import { collectReviewCrew } from "./collectors/review-crew.js";
 import { collectYabaiOrganize } from "./collectors/yabai-organize.js";
 import { loadConfig, resolveTimezone, resolveBillingSessionsFile } from "./core/config.js";
+import { applyBillingMetadata } from "./core/billing-metadata.js";
+import type { BillingConfidence, BillingMode, BillingSource } from "./core/billing-metadata.js";
 import { applyCosting } from "./core/cost.js";
 import { loadSummaries, loadEventsForRange, aggregateEvents, isWorkSource } from "./core/aggregate.js";
 import { getPaths, ensurePaths } from "./core/paths.js";
@@ -30,6 +32,19 @@ type BreakdownKey = "provider" | "project" | "model" | "source" | "billing";
 
 function isBreakdownKey(value: string): value is BreakdownKey {
   return ["provider", "project", "model", "source", "billing"].includes(value);
+}
+
+function billingMetaMatches(
+  event: UsageEvent,
+  mode: BillingMode,
+  source: BillingSource,
+  confidence: BillingConfidence
+): boolean {
+  return (
+    event.meta?.billing === mode &&
+    event.meta?.billing_source === source &&
+    event.meta?.billing_confidence === confidence
+  );
 }
 
 const program = new Command();
@@ -410,10 +425,10 @@ program
     // Load billing registry for Claude Code sessions
     const billingFile = resolveBillingSessionsFile();
     const billingEntries = await readJsonl<{ session_id: string; billing: string }>(billingFile);
-    const billingRegistry = new Map<string, string>();
+    const billingRegistry = new Map<string, BillingMode>();
     for (const entry of billingEntries) {
       if (entry.session_id && entry.billing) {
-        billingRegistry.set(entry.session_id, entry.billing);
+        billingRegistry.set(entry.session_id, entry.billing as BillingMode);
       }
     }
     const defaultBilling = config.claude?.billing?.defaultMode ?? "estimate";
@@ -436,9 +451,16 @@ program
       if (event.source === "claude_code") {
         const filePath = (event.meta?.file as string) ?? "";
         const sessionId = path.basename(filePath, ".jsonl");
-        const billing = billingRegistry.get(sessionId) ?? defaultBilling;
-        if (event.meta?.billing !== billing) {
-          event.meta = { ...event.meta, billing };
+        const registryBilling = billingRegistry.get(sessionId);
+        const billing = registryBilling ?? defaultBilling;
+        const billingSource: BillingSource = registryBilling ? "session_registry" : "config_default";
+        const billingConfidence: BillingConfidence = registryBilling ? "high" : "default";
+        if (!billingMetaMatches(event, billing, billingSource, billingConfidence)) {
+          event.meta = applyBillingMetadata(event, {
+            mode: billing,
+            source: billingSource,
+            confidence: billingConfidence,
+          }).meta;
           billingTagged++;
           updated = true;
         }
@@ -447,8 +469,12 @@ program
       // Apply billing tag to Codex events
       if (event.source === "codex_cli") {
         const codexBilling = config.codex?.billing?.defaultMode ?? "estimate";
-        if (event.meta?.billing !== codexBilling) {
-          event.meta = { ...event.meta, billing: codexBilling };
+        if (!billingMetaMatches(event, codexBilling, "config_default", "default")) {
+          event.meta = applyBillingMetadata(event, {
+            mode: codexBilling,
+            source: "config_default",
+            confidence: "default",
+          }).meta;
           billingTagged++;
           updated = true;
         }
@@ -457,8 +483,12 @@ program
       // Apply billing tag to OpenClaw events
       if (event.source === "openclaw") {
         const openclawBilling = config.openclaw?.billing?.defaultMode ?? "estimate";
-        if (event.meta?.billing !== openclawBilling) {
-          event.meta = { ...event.meta, billing: openclawBilling };
+        if (!billingMetaMatches(event, openclawBilling, "config_default", "default")) {
+          event.meta = applyBillingMetadata(event, {
+            mode: openclawBilling,
+            source: "config_default",
+            confidence: "default",
+          }).meta;
           billingTagged++;
           updated = true;
         }
